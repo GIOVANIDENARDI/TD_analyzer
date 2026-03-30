@@ -1,0 +1,1887 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TD/ANALYZER — Tesouro Direto</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&family=Sora:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/hammer.js/2.0.8/hammer.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/chartjs-plugin-zoom/2.0.1/chartjs-plugin-zoom.min.js"></script>
+<style>
+:root {
+  --bg:       #020508;
+  --bg2:      #070d14;
+  --bg3:      #0d1520;
+  --bg4:      #10192a;
+  --border:   #1c2d42;
+  --border2:  #2a4060;
+  --text:     #cce0f5;
+  --text-dim: #4a6a88;
+  --text-bright: #ffffff;
+  --green:    #00e676;
+  --green2:   #00c853;
+  --green-bg: rgba(0,230,118,0.08);
+  --red:      #ff5252;
+  --red2:     #d32f2f;
+  --red-bg:   rgba(255,82,82,0.08);
+  --yellow:   #ffd740;
+  --yellow-bg:rgba(255,215,64,0.08);
+  --blue:     #40c4ff;
+  --purple:   #ce93d8;
+  --pink:     #f48fb1;
+  --sidebar:  260px;
+  --header:   50px;
+}
+*{margin:0;padding:0;box-sizing:border-box;}
+html,body{height:100%;overflow:hidden;}
+body{background:var(--bg);color:var(--text);font-family:'Sora',sans-serif;font-size:13px;}
+
+/* ─── SCROLLBAR ─── */
+::-webkit-scrollbar{width:5px;height:5px;}
+::-webkit-scrollbar-track{background:transparent;}
+::-webkit-scrollbar-thumb{background:var(--border2);border-radius:3px;}
+
+/* ─── LOADING ─── */
+#loading{
+  position:fixed;inset:0;background:var(--bg);
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:20px;z-index:9999;
+}
+.loader-outer{
+  width:56px;height:56px;border-radius:50%;
+  border:2px solid var(--border2);
+  border-top:2px solid var(--green);
+  animation:spin .9s linear infinite;
+}
+@keyframes spin{to{transform:rotate(360deg);}}
+.loader-inner{
+  width:32px;height:32px;border-radius:50%;
+  border:2px solid var(--border);
+  border-bottom:2px solid var(--blue);
+  animation:spin .6s linear infinite reverse;
+  position:absolute;top:12px;left:12px;
+}
+.loader-rings{position:relative;}
+.loader-text{font-family:'JetBrains Mono';font-size:11px;color:var(--text-dim);letter-spacing:.5px;}
+.loader-dots::after{content:'';animation:dots 1.2s steps(4,end) infinite;}
+@keyframes dots{0%{content:'';}25%{content:'.';}50%{content:'..';}75%{content:'...';}100%{content:'';}}
+
+/* ─── APP SHELL ─── */
+#app{height:100vh;display:none;flex-direction:column;}
+#app.visible{display:flex;}
+
+/* ─── HEADER ─── */
+header{
+  height:var(--header);flex-shrink:0;
+  background:var(--bg2);border-bottom:1px solid var(--border);
+  display:flex;align-items:center;padding:0 14px;gap:14px;
+  position:relative;z-index:10;
+}
+.logo{
+  font-family:'JetBrains Mono';font-weight:700;font-size:16px;
+  color:var(--green);letter-spacing:-1px;white-space:nowrap;
+}
+.logo em{color:var(--text-dim);font-style:normal;}
+.header-sep{width:1px;height:22px;background:var(--border);flex-shrink:0;}
+.last-upd{font-family:'JetBrains Mono';font-size:10px;color:var(--text-dim);white-space:nowrap;}
+.last-upd strong{color:var(--text-bright);}
+.hdr-spacer{flex:1;}
+.hdr-status{
+  display:flex;align-items:center;gap:6px;
+  font-family:'JetBrains Mono';font-size:10px;color:var(--text-dim);
+}
+.status-dot{width:6px;height:6px;border-radius:50%;background:var(--green);
+  box-shadow:0 0 6px var(--green);animation:pulse 2s ease-in-out infinite;}
+@keyframes pulse{0%,100%{opacity:1;}50%{opacity:.4;};}
+.hdr-btn{
+  padding:5px 11px;background:transparent;
+  border:1px solid var(--border2);border-radius:4px;
+  color:var(--text);font-family:'Sora';font-size:11px;
+  cursor:pointer;transition:all .15s;white-space:nowrap;
+}
+.hdr-btn:hover{border-color:var(--green);color:var(--green);}
+
+/* ─── LAYOUT ─── */
+.layout{display:flex;flex:1;overflow:hidden;}
+
+/* ─── SIDEBAR ─── */
+aside{
+  width:var(--sidebar);flex-shrink:0;
+  background:var(--bg2);border-right:1px solid var(--border);
+  display:flex;flex-direction:column;overflow:hidden;
+}
+.sb-head{
+  padding:10px 13px;border-bottom:1px solid var(--border);
+  font-size:9px;font-weight:700;letter-spacing:1.5px;
+  color:var(--text-dim);text-transform:uppercase;
+}
+.bond-tree{flex:1;overflow-y:auto;padding:6px 0;}
+
+.tg{border-bottom:1px solid rgba(26,37,53,.6);}
+.tg-hdr{
+  display:flex;align-items:center;gap:7px;
+  padding:8px 13px;cursor:pointer;
+  color:var(--text);font-size:11.5px;font-weight:500;
+  transition:background .12s;user-select:none;
+}
+.tg-hdr:hover{background:rgba(255,255,255,.03);}
+.tg-arrow{font-size:8px;color:var(--text-dim);transition:transform .2s;flex-shrink:0;}
+.tg-arrow.open{transform:rotate(90deg);}
+.tg-name{flex:1;line-height:1.3;}
+.tg-count{
+  font-family:'JetBrains Mono';font-size:9px;
+  color:var(--text-dim);background:var(--bg3);
+  padding:1px 5px;border-radius:10px;
+}
+
+.tg-children{display:none;}
+.tg-children.open{display:block;}
+
+.tg-mat{
+  display:flex;align-items:center;gap:8px;
+  padding:5px 13px 5px 30px;cursor:pointer;
+  color:var(--text-dim);font-family:'JetBrains Mono';font-size:11px;
+  transition:all .12s;
+}
+.tg-mat:hover{background:rgba(255,255,255,.03);color:var(--text);}
+.tg-mat.active{
+  background:linear-gradient(90deg,rgba(0,230,118,.1),transparent);
+  color:var(--green);
+}
+.mat-dot{
+  width:5px;height:5px;border-radius:50%;
+  border:1.5px solid var(--border2);flex-shrink:0;transition:all .15s;
+}
+.tg-mat.active .mat-dot{background:var(--green);border-color:var(--green);box-shadow:0 0 5px var(--green);}
+.mat-year{flex:1;}
+.mat-rate{font-size:9px;color:var(--text-dim);}
+.tg-mat.active .mat-rate{color:var(--green-dim,#1b5e20);}
+
+/* ─── MAIN ─── */
+main{flex:1;display:flex;flex-direction:column;overflow:hidden;min-width:0;}
+
+/* ─── CONTROLS ─── */
+.ctrl-bar{
+  padding:7px 14px;background:var(--bg2);
+  border-bottom:1px solid var(--border);
+  display:flex;align-items:center;gap:12px;flex-wrap:nowrap;overflow-x:auto;flex-shrink:0;
+}
+.ctrl-grp{display:flex;align-items:center;gap:6px;white-space:nowrap;}
+.ctrl-lbl{font-size:9px;color:var(--text-dim);letter-spacing:.5px;text-transform:uppercase;}
+.ctrl-inp{
+  background:var(--bg3);border:1px solid var(--border2);
+  color:var(--text-bright);font-family:'JetBrains Mono';font-size:11px;
+  padding:3px 7px;border-radius:3px;outline:none;
+  transition:border-color .15s;
+}
+.ctrl-inp:focus{border-color:var(--blue);}
+.ctrl-inp[type=number]{width:58px;text-align:center;}
+.ctrl-inp[type=date]{width:122px;}
+.ctrl-sep{width:1px;height:18px;background:var(--border);flex-shrink:0;}
+
+.tog{
+  padding:3px 9px;background:transparent;
+  border:1px solid var(--border2);border-radius:3px;
+  color:var(--text-dim);font-size:10px;cursor:pointer;
+  transition:all .15s;white-space:nowrap;
+}
+.tog:hover{border-color:var(--text-dim);}
+.tog.on{background:rgba(64,196,255,.1);border-color:var(--blue);color:var(--blue);}
+.tog.green-on{background:rgba(0,230,118,.1);border-color:var(--green);color:var(--green);}
+
+.quick-btns{display:flex;gap:4px;}
+.qbtn{
+  padding:3px 8px;background:transparent;
+  border:1px solid var(--border);border-radius:3px;
+  color:var(--text-dim);font-family:'JetBrains Mono';font-size:10px;
+  cursor:pointer;transition:all .12s;
+}
+.qbtn:hover{border-color:var(--text-dim);color:var(--text);}
+.qbtn.active{border-color:var(--blue);color:var(--blue);}
+
+/* ─── SIGNAL BAR ─── */
+.sig-bar{
+  padding:7px 14px;background:var(--bg);
+  border-bottom:1px solid var(--border);
+  display:flex;align-items:center;gap:20px;flex-shrink:0;flex-wrap:nowrap;
+  overflow-x:auto;
+}
+.sig-badge{
+  padding:4px 14px;border-radius:3px;
+  font-family:'JetBrains Mono';font-weight:700;font-size:12px;
+  letter-spacing:1.5px;white-space:nowrap;flex-shrink:0;
+  transition:all .3s;
+}
+.sig-badge.compra{background:var(--green-bg);color:var(--green);border:1px solid rgba(0,230,118,.3);}
+.sig-badge.venda {background:var(--red-bg);  color:var(--red); border:1px solid rgba(255,82,82,.3);}
+.sig-badge.neutro{background:var(--yellow-bg);color:var(--yellow);border:1px solid rgba(255,215,64,.25);}
+.sig-badge.aguarde{background:var(--bg3);color:var(--text-dim);border:1px solid var(--border);}
+
+.stat{display:flex;flex-direction:column;gap:2px;flex-shrink:0;}
+.stat-l{font-size:9px;color:var(--text-dim);letter-spacing:.4px;text-transform:uppercase;white-space:nowrap;}
+.stat-v{font-family:'JetBrains Mono';font-size:13px;font-weight:600;color:var(--text-bright);}
+.stat-v.g{color:var(--green);}
+.stat-v.r{color:var(--red);}
+.stat-v.y{color:var(--yellow);}
+.stat-v.b{color:var(--blue);}
+.stat-v.p{color:var(--purple);}
+.stat-v.sm{font-size:11px;}
+
+.var-wrap{display:flex;flex-direction:column;gap:4px;flex-shrink:0;min-width:140px;}
+.var-bar-bg{height:4px;background:var(--bg3);border-radius:2px;overflow:hidden;}
+.var-bar-fg{height:100%;border-radius:2px;background:linear-gradient(90deg,var(--red2),var(--yellow),var(--green2));transition:width .5s ease;}
+
+.sig-spacer{flex:1;}
+.reset-zoom{
+  padding:3px 9px;background:transparent;
+  border:1px solid var(--border);border-radius:3px;
+  color:var(--text-dim);font-size:10px;cursor:pointer;
+  transition:all .15s;flex-shrink:0;
+}
+.reset-zoom:hover{border-color:var(--blue);color:var(--blue);}
+
+/* ─── CHART ─── */
+.chart-area{flex:1;padding:10px 14px 6px;min-height:0;display:flex;flex-direction:column;}
+.chart-title-row{
+  display:flex;align-items:center;justify-content:space-between;
+  margin-bottom:5px;
+}
+.chart-ttl{font-family:'JetBrains Mono';font-size:10px;color:var(--text-dim);}
+.chart-ttl strong{color:var(--text-bright);}
+.chart-legend-info{font-family:'JetBrains Mono';font-size:9px;color:var(--text-dim);}
+.chart-canvas-wrap{flex:1;position:relative;min-height:0;}
+
+/* ─── BOTTOM TABLE ─── */
+.bottom-panel{
+  height:136px;flex-shrink:0;
+  border-top:1px solid var(--border);
+  background:var(--bg2);overflow-y:auto;overflow-x:auto;
+}
+table{width:100%;border-collapse:collapse;}
+thead th{
+  position:sticky;top:0;background:var(--bg3);
+  border-bottom:1px solid var(--border);
+  padding:5px 12px;text-align:right;
+  color:var(--text-dim);font-family:'JetBrains Mono';font-size:9px;
+  letter-spacing:.5px;text-transform:uppercase;white-space:nowrap;
+}
+thead th:first-child{text-align:left;}
+tbody tr{border-bottom:1px solid rgba(26,37,53,.4);transition:background .1s;}
+tbody tr:hover{background:rgba(255,255,255,.025);}
+tbody tr:first-child td{font-weight:600;}
+tbody td{
+  padding:4px 12px;text-align:right;
+  font-family:'JetBrains Mono';font-size:10px;color:#ffffff;
+  white-space:nowrap;
+}
+tbody td:first-child{text-align:left;color:var(--text-dim);}
+.up{color:var(--green)!important;}
+.dn{color:var(--red)!important;}
+
+/* ─── EMPTY STATE ─── */
+.empty-state{
+  flex:1;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;
+  gap:12px;color:var(--text-dim);text-align:center;padding:32px;
+}
+.empty-icon{font-size:36px;opacity:.3;}
+.empty-title{font-size:14px;color:var(--text);}
+.empty-sub{font-size:11px;line-height:1.6;max-width:320px;}
+
+/* ─── ERROR TOAST ─── */
+.toast{
+  position:fixed;top:60px;left:50%;transform:translateX(-50%);
+  background:rgba(255,82,82,.12);border:1px solid rgba(255,82,82,.4);
+  color:var(--red);padding:8px 18px;border-radius:5px;
+  font-size:12px;font-family:'JetBrains Mono';z-index:999;
+  animation:slideIn .2s ease;
+}
+@keyframes slideIn{from{transform:translateX(-50%) translateY(-10px);opacity:0;}to{transform:translateX(-50%);opacity:1;}}
+
+/* ─── CROSSHAIR CURSOR ─── */
+#main-chart{cursor:crosshair;}
+
+/* ─── HELP CHIP ─── */
+.help-chip{
+  font-size:10px;color:var(--text-dim);
+  border:1px solid var(--border);border-radius:12px;
+  padding:2px 8px;display:inline-flex;align-items:center;gap:4px;
+}
+
+/* ─── MODAL ─── */
+.modal-overlay{
+  position:fixed;inset:0;background:rgba(0,0,0,.75);
+  display:flex;align-items:center;justify-content:center;
+  z-index:8000;backdrop-filter:blur(4px);
+}
+.modal-overlay.hidden{display:none;}
+.modal-box{
+  background:var(--bg2);border:1px solid var(--border2);
+  border-radius:8px;width:min(680px,95vw);max-height:90vh;
+  overflow-y:auto;padding:28px;display:flex;flex-direction:column;gap:18px;
+}
+.modal-title{
+  font-family:'JetBrains Mono';font-size:15px;font-weight:700;
+  color:var(--text-bright);display:flex;align-items:center;gap:10px;
+}
+.modal-sub{font-size:12px;color:var(--text);line-height:1.7;}
+.modal-sub b{color:var(--green);}
+.modal-sub code{
+  background:var(--bg3);border:1px solid var(--border);
+  border-radius:3px;padding:1px 5px;
+  font-family:'JetBrains Mono';font-size:11px;color:var(--blue);
+}
+.modal-step{
+  display:flex;gap:12px;align-items:flex-start;
+}
+.step-num{
+  width:22px;height:22px;border-radius:50%;
+  background:var(--green);color:#000;
+  font-family:'JetBrains Mono';font-size:11px;font-weight:700;
+  display:flex;align-items:center;justify-content:center;flex-shrink:0;
+  margin-top:1px;
+}
+.step-txt{font-size:12px;color:var(--text);line-height:1.6;}
+.step-txt a{color:var(--blue);text-decoration:none;}
+.step-txt a:hover{text-decoration:underline;}
+.gas-code{
+  background:var(--bg);border:1px solid var(--border2);
+  border-radius:5px;padding:14px;
+  font-family:'JetBrains Mono';font-size:11px;color:#a8d8a8;
+  white-space:pre;overflow-x:auto;line-height:1.6;
+  position:relative;
+}
+.copy-btn{
+  position:absolute;top:8px;right:8px;
+  padding:3px 9px;background:var(--bg3);
+  border:1px solid var(--border2);border-radius:3px;
+  color:var(--text-dim);font-size:10px;cursor:pointer;
+  transition:all .15s;
+}
+.copy-btn:hover{border-color:var(--green);color:var(--green);}
+.gas-url-wrap{display:flex;gap:8px;align-items:center;}
+.gas-url-inp{
+  flex:1;background:var(--bg3);border:1px solid var(--border2);
+  color:var(--text-bright);font-family:'JetBrains Mono';font-size:11px;
+  padding:7px 10px;border-radius:4px;outline:none;
+  transition:border-color .15s;
+}
+.gas-url-inp:focus{border-color:var(--green);}
+.gas-url-inp::placeholder{color:var(--text-dim);}
+.modal-btns{display:flex;gap:10px;justify-content:flex-end;margin-top:4px;}
+.mbtn{
+  padding:7px 18px;border-radius:4px;font-size:12px;
+  cursor:pointer;transition:all .15s;font-family:'Sora';
+}
+.mbtn-cancel{background:transparent;border:1px solid var(--border2);color:var(--text-dim);}
+.mbtn-cancel:hover{border-color:var(--text-dim);}
+.mbtn-save{background:var(--green);border:1px solid var(--green);color:#000;font-weight:600;}
+.mbtn-save:hover{background:var(--green2);}
+.conn-badge{
+  display:inline-flex;align-items:center;gap:5px;
+  font-family:'JetBrains Mono';font-size:9px;letter-spacing:.4px;
+  padding:2px 8px;border-radius:10px;flex-shrink:0;
+}
+.conn-badge.ok {background:rgba(0,230,118,.12);color:var(--green);border:1px solid rgba(0,230,118,.3);}
+.conn-badge.err{background:rgba(255,82,82,.1);color:var(--red);border:1px solid rgba(255,82,82,.25);}
+.conn-badge.wait{background:var(--bg3);color:var(--text-dim);border:1px solid var(--border);}
+</style>
+</head>
+<body>
+
+<!-- Loading -->
+<div id="loading">
+  <div class="loader-rings">
+    <div class="loader-outer"></div>
+    <div class="loader-inner"></div>
+  </div>
+  <div class="loader-text" id="load-text">Conectando ao Tesouro Transparente<span class="loader-dots"></span></div>
+</div>
+
+<!-- App -->
+<div id="app">
+
+  <header>
+    <div class="logo">TD<em>/</em>ANALYZER</div>
+    <div class="header-sep"></div>
+    <div class="last-upd">Atualizado: <strong id="last-date">—</strong></div>
+    <div class="header-sep"></div>
+    <div class="hdr-status"><div class="status-dot" id="status-dot"></div><span id="status-txt">DADOS TESOURO TRANSPARENTE</span></div>
+    <div class="hdr-spacer"></div>
+    <button class="hdr-btn" onclick="openGasModal()" title="Configurar conexão automática">⚙ Auto-Sync</button>
+    <button class="hdr-btn" onclick="reloadData()">↻ Atualizar</button>
+    <label class="hdr-btn" style="cursor:pointer;">
+      ↑ Importar CSV
+      <input type="file" accept=".csv,.txt" style="display:none" onchange="handleUpload(event)">
+    </label>
+  </header>
+
+  <!-- Modal GAS -->
+  <div class="modal-overlay hidden" id="gas-modal" onclick="closeGasModal(event)">
+    <div class="modal-box">
+      <div class="modal-title">⚡ Conexão Automática — Google Apps Script</div>
+
+      <div class="modal-sub">
+        O servidor do Tesouro Transparente bloqueia requisições diretas do navegador (CORS).
+        A solução é criar um <b>proxy gratuito no Google Apps Script</b> — leva menos de 3 minutos
+        e funciona para sempre, sem custo.
+      </div>
+
+      <div class="modal-step">
+        <div class="step-num">1</div>
+        <div class="step-txt">
+          Acesse <a href="https://script.google.com" target="_blank">script.google.com</a>,
+          clique em <b>Novo projeto</b> e apague o conteúdo padrão.
+        </div>
+      </div>
+
+      <div class="modal-step">
+        <div class="step-num">2</div>
+        <div class="step-txt">Cole o código abaixo e clique em <b>Salvar</b>:</div>
+      </div>
+
+      <div class="gas-code" id="gas-code-block">function doGet(e) {
+  var url = 'https://www.tesourotransparente.gov.br/ckan/dataset/' +
+            'df56aa42-484a-4a59-8184-7676580c81e3/resource/' +
+            '796d2059-14e9-44e3-80c9-2d9e30b405c1/download/precotaxatesourodireto.csv';
+
+  var response = UrlFetchApp.fetch(url, {
+    muteHttpExceptions: true,
+    followRedirects: true
+  });
+
+  var content = response.getContentText('windows-1252');
+
+  return ContentService
+    .createTextOutput(content)
+    .setMimeType(ContentService.MimeType.TEXT);
+}
+        <button class="copy-btn" onclick="copyGasCode()">Copiar</button>
+      </div>
+
+      <div class="modal-step">
+        <div class="step-num">3</div>
+        <div class="step-txt">
+          Clique em <b>Implantar → Nova implantação</b>.<br>
+          Tipo: <b>App da Web</b> · Executar como: <b>Eu</b> · Acesso: <b>Qualquer pessoa</b>.<br>
+          Clique em <b>Implantar</b> e copie a URL gerada.
+        </div>
+      </div>
+
+      <div class="modal-step">
+        <div class="step-num">4</div>
+        <div class="step-txt">Cole a URL aqui e clique em <b>Salvar e Conectar</b>:</div>
+      </div>
+
+      <div class="gas-url-wrap">
+        <input class="gas-url-inp" id="gas-url-inp"
+          placeholder="https://script.google.com/macros/s/AKfycb.../exec"
+          oninput="gasUrlChanged()">
+        <span class="conn-badge wait" id="gas-conn-badge">— não configurado</span>
+      </div>
+      <div style="margin-top:6px;">
+        <button class="mbtn" style="background:var(--bg3);border:1px solid var(--border2);color:var(--blue);font-size:11px;padding:5px 12px;"
+          onclick="testGasUrl()">🔗 Testar URL no navegador</button>
+        <span style="font-size:10px;color:var(--text-dim);margin-left:8px;">
+          (deve aparecer o CSV do Tesouro — se pedir autorização, clique em Permitir)
+        </span>
+      </div>
+
+      <div class="modal-btns">
+        <button class="mbtn mbtn-cancel" onclick="closeGasModal()">Fechar</button>
+        <button class="mbtn mbtn-save" onclick="saveGasUrl()">💾 Salvar e Conectar</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="layout">
+
+    <!-- Sidebar -->
+    <aside>
+      <div class="sb-head">Títulos Disponíveis</div>
+      <div class="bond-tree" id="bond-tree">
+        <div class="empty-state">
+          <div class="empty-icon">📊</div>
+          <div>Carregando títulos...</div>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Main area -->
+    <main>
+
+      <!-- Controls -->
+      <div class="ctrl-bar">
+        <div class="ctrl-grp">
+          <span class="ctrl-lbl">De</span>
+          <input type="date" class="ctrl-inp" id="date-from" onchange="updateChart()">
+        </div>
+        <div class="ctrl-grp">
+          <span class="ctrl-lbl">Até</span>
+          <input type="date" class="ctrl-inp" id="date-to" onchange="updateChart()">
+        </div>
+        <div class="ctrl-sep"></div>
+        <div class="ctrl-grp">
+          <span class="ctrl-lbl" style="color:#ff4444">EMA</span>
+          <input type="number" class="ctrl-inp" id="ma-ema" value="9" min="2" max="999" onchange="updateChart()" style="width:50px">
+        </div>
+        <div class="ctrl-grp">
+          <span class="ctrl-lbl" style="color:#40c4ff">SMA</span>
+          <input type="number" class="ctrl-inp" id="ma-short" value="21" min="2" max="999" onchange="updateChart()" style="width:50px">
+        </div>
+        <div class="ctrl-grp">
+          <span class="ctrl-lbl" style="color:#00e676">SMA</span>
+          <input type="number" class="ctrl-inp" id="ma-long" value="50" min="2" max="999" onchange="updateChart()" style="width:50px">
+        </div>
+        <div class="ctrl-sep"></div>
+        <button class="tog on" id="btn-invert" onclick="toggleOpt('invert')">Eixo ↕</button>
+        <button class="tog on" id="btn-zones" onclick="toggleOpt('zones')">Zonas</button>
+        <button class="tog" id="btn-pu" onclick="toggleOpt('pu')">Ver PU</button>
+        <button class="tog" id="btn-candle" onclick="toggleOpt('candle')">🕯 Candle</button>
+        <div class="ctrl-grp" id="candle-period-wrap" style="display:none">
+          <span class="ctrl-lbl">Período</span>
+          <select class="ctrl-inp" id="candle-period" onchange="updateChart()" style="padding:3px 6px">
+            <option value="W">Semanal</option>
+            <option value="M">Mensal</option>
+            <option value="D">Diário</option>
+          </select>
+        </div>
+        <div class="ctrl-sep"></div>
+        <div class="quick-btns">
+          <button class="qbtn" onclick="setRange(180,'6M')">6M</button>
+          <button class="qbtn" onclick="setRange(365,'1A')">1A</button>
+          <button class="qbtn" onclick="setRange(365*2,'2A')">2A</button>
+          <button class="qbtn active" onclick="setRange(365*5,'5A')">5A</button>
+          <button class="qbtn" onclick="setRange(0,'MAX')">MAX</button>
+        </div>
+      </div>
+
+      <!-- Signal bar -->
+      <div class="sig-bar">
+        <div class="sig-badge aguarde" id="sig-badge">— SELECIONE UM TÍTULO —</div>
+
+        <div class="stat">
+          <span class="stat-l">Taxa Atual</span>
+          <span class="stat-v b" id="sv-current">—</span>
+        </div>
+
+        <div class="stat">
+          <span class="stat-l" style="color:#ff4444">EMA (<span id="sl-ema">9</span>)</span>
+          <span class="stat-v" style="color:#ff4444" id="sv-ema">—</span>
+        </div>
+
+        <div class="stat">
+          <span class="stat-l" style="color:#40c4ff">SMA (<span id="sl-mmc">21</span>)</span>
+          <span class="stat-v" style="color:#40c4ff" id="sv-mmc">—</span>
+        </div>
+
+        <div class="stat">
+          <span class="stat-l" style="color:#00e676">SMA (<span id="sl-mml">50</span>)</span>
+          <span class="stat-v" style="color:#00e676" id="sv-mml">—</span>
+        </div>
+
+        <div class="stat">
+          <span class="stat-l">Máx Período</span>
+          <span class="stat-v g" id="sv-max">—</span>
+        </div>
+
+        <div class="stat">
+          <span class="stat-l">Mín Período</span>
+          <span class="stat-v r" id="sv-min">—</span>
+        </div>
+
+        <div class="stat">
+          <span class="stat-l">Dist. do Topo</span>
+          <span class="stat-v y" id="sv-dist">—</span>
+        </div>
+
+        <div class="var-wrap">
+          <div style="display:flex;justify-content:space-between;align-items:center;">
+            <span class="stat-l">Posição Topo/Fundo</span>
+            <span class="stat-v y sm" id="sv-var">—</span>
+          </div>
+          <div class="var-bar-bg"><div class="var-bar-fg" id="var-fg" style="width:0%"></div></div>
+        </div>
+
+        <div class="sig-spacer"></div>
+        <button class="reset-zoom" onclick="resetZoom()" title="Resetar zoom (duplo clique no gráfico)">⊙ Reset Zoom</button>
+        <span class="help-chip">🖱 Scroll = zoom · Drag = pan</span>
+      </div>
+
+      <!-- Chart -->
+      <div class="chart-area">
+        <div class="chart-title-row">
+          <span class="chart-ttl" id="chart-ttl">Selecione um título no painel à esquerda</span>
+          <span class="chart-legend-info" id="chart-info"></span>
+        </div>
+        <div class="chart-canvas-wrap">
+          <canvas id="main-chart"></canvas>
+        </div>
+      </div>
+
+      <!-- Bottom table -->
+      <div class="bottom-panel">
+        <table>
+          <thead>
+            <tr>
+              <th>Data Base</th>
+              <th>Taxa Compra</th>
+              <th>Taxa Venda</th>
+              <th>PU Compra</th>
+              <th>PU Venda</th>
+              <th>Δ Taxa</th>
+              <th>Δ PU</th>
+            </tr>
+          </thead>
+          <tbody id="data-table">
+            <tr><td colspan="7" style="text-align:center;padding:20px;color:var(--text-dim)">Nenhum dado selecionado</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+    </main>
+  </div>
+</div>
+
+<script>
+// ══════════════════════════════════════════════════════════════
+// STATE
+// ══════════════════════════════════════════════════════════════
+let allData = [];
+let chart   = null;
+let selBond = null;
+let selYear = null;
+let opts    = { invert: true, zones: true, pu: false, candle: false };
+let ratesByBondYear = {};  // cache: "tipo|year" -> sorted rows
+
+// ══════════════════════════════════════════════════════════════
+// UTILITIES
+// ══════════════════════════════════════════════════════════════
+const parseDate = s => {
+  if (!s) return null;
+  const p = s.trim().split('/');
+  if (p.length !== 3) return null;
+  return new Date(+p[2], +p[1]-1, +p[0]);
+};
+const parseNum = s => {
+  if (!s || !s.trim()) return NaN;
+  return parseFloat(s.replace(/\./g,'').replace(',','.'));
+};
+const fmt = {
+  date: d => d ? d.toLocaleDateString('pt-BR') : '—',
+  rate: v => (isNaN(v)||v===null) ? '—' : v.toFixed(2)+'%',
+  pu:   v => (isNaN(v)||v===null) ? '—' : 'R$\u202f'+v.toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2}),
+  toInput: d => {
+    if (!d) return '';
+    const y = d.getFullYear();
+    const m = String(d.getMonth()+1).padStart(2,'0');
+    const dd = String(d.getDate()).padStart(2,'0');
+    return `${y}-${m}-${dd}`;
+  },
+  fromInput: s => s ? new Date(s+'T00:00:00') : null,
+};
+
+const arrMax = arr => arr.reduce((m,v) => (v!==null&&!isNaN(v)&&v>m)?v:m, -Infinity);
+const arrMin = arr => arr.reduce((m,v) => (v!==null&&!isNaN(v)&&v<m)?v:m,  Infinity);
+
+// SMA com janela deslizante O(n) — sem slice/spread
+const sma = (arr, n) => {
+  const out = new Array(arr.length).fill(null);
+  let sum = 0, cnt = 0;
+  for (let i = 0; i < arr.length; i++) {
+    const v = arr[i];
+    if (v !== null && !isNaN(v)) { sum += v; cnt++; }
+    if (i >= n) {
+      const old = arr[i - n];
+      if (old !== null && !isNaN(old)) { sum -= old; cnt--; }
+    }
+    if (i >= n - 1 && cnt > 0) out[i] = sum / cnt;
+  }
+  return out;
+};
+
+const ema = (arr, n) => {
+  const k = 2/(n+1);
+  const out = new Array(arr.length).fill(null);
+  let prev = null;
+  for (let i=0;i<arr.length;i++){
+    if (arr[i]===null||isNaN(arr[i])) continue;
+    if (prev===null) { prev=arr[i]; out[i]=prev; continue; }
+    prev = arr[i]*k + prev*(1-k);
+    out[i]=prev;
+  }
+  return out;
+};
+
+// ══════════════════════════════════════════════════════════════
+// GAS MODAL
+// ══════════════════════════════════════════════════════════════
+const GAS_KEY     = 'td_gas_url';
+const GAS_DEFAULT = 'https://script.google.com/macros/s/AKfycbyGQRrE9GTWBM_BR3pGUl1RPGBUmNuLrarJBNgKmTbfdathhTDu3ies-oJcTWtUBUib/exec';
+
+function getGasUrl() { return localStorage.getItem(GAS_KEY) || GAS_DEFAULT; }
+
+function openGasModal() {
+  const url = localStorage.getItem(GAS_KEY) || GAS_DEFAULT;
+  document.getElementById('gas-url-inp').value = url;
+  updateGasBadge(url ? 'saved' : 'empty');
+  document.getElementById('gas-modal').classList.remove('hidden');
+}
+function closeGasModal(e) {
+  if (e && e.target !== document.getElementById('gas-modal')) return;
+  document.getElementById('gas-modal').classList.add('hidden');
+}
+function gasUrlChanged() {
+  updateGasBadge('typing');
+}
+function updateGasBadge(state) {
+  const b = document.getElementById('gas-conn-badge');
+  if (!b) return;
+  const map = {
+    typing: ['wait','digitando...'],
+    empty:  ['wait','— não configurado'],
+    saved:  ['ok','✓ configurado'],
+    ok:     ['ok','✓ conectado'],
+    err:    ['err','✗ erro de conexão'],
+  };
+  const [cls,txt] = map[state]||['wait','—'];
+  b.className = 'conn-badge '+cls;
+  b.textContent = txt;
+}
+function testGasUrl() {
+  const url = document.getElementById('gas-url-inp').value.trim() || getGasUrl();
+  if (!url) { alert('Insira a URL primeiro.'); return; }
+  window.open(url, '_blank');
+}
+
+function saveGasUrl() {
+  const url = document.getElementById('gas-url-inp').value.trim();
+  if (url && !url.startsWith('https://script.google.com/macros/')) {
+    alert('URL inválida. Deve começar com https://script.google.com/macros/');
+    return;
+  }
+  if (url) localStorage.setItem(GAS_KEY, url);
+  else      localStorage.removeItem(GAS_KEY);
+  document.getElementById('gas-modal').classList.add('hidden');
+  reloadData();
+}
+function copyGasCode() {
+  const code = document.getElementById('gas-code-block').innerText.replace(/Copiar\s*$/, '').trim();
+  navigator.clipboard.writeText(code).then(() => {
+    const btn = document.querySelector('.copy-btn');
+    btn.textContent = '✓ Copiado!';
+    setTimeout(() => btn.textContent = 'Copiar', 2000);
+  });
+}
+function setStatus(txt, color='var(--text-dim)') {
+  const el = document.getElementById('status-txt');
+  if (el) el.textContent = txt;
+  const dot = document.getElementById('status-dot');
+  if (dot) dot.style.background = color;
+}
+
+// ══════════════════════════════════════════════════════════════
+// DATA FETCH — GAS proxy → CKAN API → CSV proxies → manual
+// ══════════════════════════════════════════════════════════════
+
+const RESOURCE_ID = '796d2059-14e9-44e3-80c9-2d9e30b405c1';
+const CSV_URL     = `https://www.tesourotransparente.gov.br/ckan/dataset/df56aa42-484a-4a59-8184-7676580c81e3/resource/${RESOURCE_ID}/download/precotaxatesourodireto.csv`;
+const CKAN_BASE   = `https://www.tesourotransparente.gov.br/ckan/api/3/action/datastore_search?resource_id=${RESOURCE_ID}`;
+
+// Todos os proxies CORS disponíveis
+const PROXIES = [
+  url => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
+  url => `https://corsproxy.io/?${encodeURIComponent(url)}`,
+  url => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`,
+  url => `https://thingproxy.freeboard.io/fetch/${url}`,
+];
+
+async function tryFetch(url, asJson=false) {
+  const ctrl = new AbortController();
+  const tid  = setTimeout(() => ctrl.abort(), 12000);
+  try {
+    const r = await fetch(url, { cache:'no-cache', signal: ctrl.signal });
+    clearTimeout(tid);
+    if (!r.ok) throw new Error('HTTP '+r.status);
+    return asJson ? await r.json() : await r.text();
+  } catch(e) {
+    clearTimeout(tid);
+    throw e;
+  }
+}
+
+// ── Estratégia 1: API CKAN JSON paginada (sem CSV) ──
+async function fetchViaCKAN() {
+  // Conta total de registros
+  setLoadText('🔗 Consultando API do Tesouro...');
+  const probe = await tryFetch(CKAN_BASE + '&limit=1', true);
+  const total = probe?.result?.total;
+  if (!total) throw new Error('API CKAN sem dados');
+
+  const PAGE = 10000;
+  const pages = Math.ceil(total / PAGE);
+  const allRecords = [];
+
+  for (let p = 0; p < pages; p++) {
+    setLoadText(`📥 API Tesouro: página ${p+1}/${pages} (${allRecords.length.toLocaleString()} registros)...`);
+    const offset = p * PAGE;
+    const url    = `${CKAN_BASE}&limit=${PAGE}&offset=${offset}`;
+    const json   = await tryFetch(url, true);
+    const recs   = json?.result?.records;
+    if (!recs?.length) break;
+    allRecords.push(...recs);
+  }
+
+  if (!allRecords.length) throw new Error('CKAN retornou 0 registros');
+  setLoadText(`⚙️ Processando ${allRecords.length.toLocaleString()} registros...`);
+  await sleep(20);
+  return processJSON(allRecords);
+}
+
+// ── Estratégia 1b: API CKAN via proxy (se CORS bloquear direto) ──
+async function fetchViaCKANProxy() {
+  for (let pi = 0; pi < PROXIES.length; pi++) {
+    try {
+      const proxyUrl = PROXIES[pi](CKAN_BASE + '&limit=1');
+      setLoadText(`🔗 Testando API via proxy ${pi+1}...`);
+      const probe = await tryFetch(proxyUrl, true);
+      const total = probe?.result?.total;
+      if (!total) continue;
+
+      const PAGE = 5000;
+      const pages = Math.ceil(Math.min(total, 60000) / PAGE);
+      const allRecords = [];
+
+      for (let p = 0; p < pages; p++) {
+        setLoadText(`📥 Proxy ${pi+1}: pg ${p+1}/${pages}...`);
+        const url  = PROXIES[pi](CKAN_BASE + `&limit=${PAGE}&offset=${p*PAGE}`);
+        const json = await tryFetch(url, true);
+        const recs = json?.result?.records;
+        if (!recs?.length) break;
+        allRecords.push(...recs);
+      }
+
+      if (allRecords.length) {
+        setLoadText(`⚙️ Processando ${allRecords.length.toLocaleString()} registros...`);
+        await sleep(20);
+        return processJSON(allRecords);
+      }
+    } catch(e) { console.warn(`CKAN proxy ${pi+1} falhou:`, e.message); }
+  }
+  throw new Error('CKAN via proxy falhou');
+}
+
+// ── Estratégia 2: CSV direto + proxies ──
+async function fetchViaCSV() {
+  const urls = [
+    { label:'direto', url: CSV_URL },
+    ...PROXIES.map((fn,i) => ({ label:`proxy ${i+1}`, url: fn(CSV_URL) })),
+  ];
+  for (const { label, url } of urls) {
+    try {
+      setLoadText(`📄 Baixando CSV (${label})...`);
+      const txt = await tryFetch(url, false);
+      if (txt.length < 1000) continue;
+      // Valida que parece um CSV do Tesouro
+      if (!txt.toLowerCase().includes('tipo') || !txt.includes('/')) continue;
+      setLoadText(`⚙️ Processando CSV ${(txt.length/1024|0)} KB...`);
+      await sleep(20);
+      return processCSV(txt);
+    } catch(e) { console.warn(`CSV ${label} falhou:`, e.message); }
+  }
+  throw new Error('CSV indisponível em todas as fontes');
+}
+
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+async function fetchAllData() {
+  // ── Estratégia 0: Google Apps Script do usuário ──
+  const gasUrl = getGasUrl();
+  if (gasUrl) {
+    try {
+      setLoadText('⚡ Conectando via Google Apps Script...');
+      setStatus('CONECTANDO VIA GAS...', 'var(--yellow)');
+
+      const ctrl = new AbortController();
+      const tid  = setTimeout(() => ctrl.abort(), 30000);
+      let resp;
+      try {
+        resp = await fetch(gasUrl, {
+          redirect: 'follow',
+          signal: ctrl.signal,
+          cache: 'no-cache',
+        });
+      } finally { clearTimeout(tid); }
+
+      if (!resp.ok) throw new Error(`GAS retornou HTTP ${resp.status}`);
+
+      const txt = await resp.text();
+
+      // Detecta se veio HTML (redirecionamento para login do Google)
+      if (txt.trim().startsWith('<') || txt.includes('<!DOCTYPE') || txt.includes('<html')) {
+        throw new Error(
+          'GAS retornou página HTML (não CSV).\n' +
+          'Provável causa: script não autorizado.\n' +
+          'Abra a URL do GAS direto no navegador e clique em "Autorizar". ' +
+          'Depois clique em ⚙ Auto-Sync → Salvar e Conectar novamente.'
+        );
+      }
+      if (txt.length < 200) throw new Error('Resposta muito curta ('+txt.length+' bytes): '+txt.slice(0,100));
+      if (!txt.includes(';') && !txt.includes(',')) throw new Error('Resposta não parece CSV. Início: '+txt.slice(0,80));
+
+      setLoadText(`⚙️ Processando ${(txt.length/1024|0)} KB...`);
+      await sleep(20);
+      const data = processCSV(txt);
+      setStatus('GAS ✓ CONECTADO', 'var(--green)');
+      updateGasBadge('ok');
+      return data;
+
+    } catch(e) {
+      console.warn('[TD] GAS falhou:', e.message);
+      const firstLine = e.message.split('\n')[0];
+      setStatus('GAS: '+firstLine.slice(0,45), 'var(--red)');
+      updateGasBadge('err');
+      showToast('⚠ GAS: '+firstLine, 9000);
+    }
+  }
+
+  // ── Estratégia 1: API CKAN JSON direta ──
+  try {
+    setStatus('CKAN API...', 'var(--yellow)');
+    const data = await fetchViaCKAN();
+    if (data?.length) { setStatus('CKAN ✓', 'var(--green)'); return data; }
+  } catch(e) { console.warn('[TD] CKAN direto:', e.message); }
+
+  // ── Estratégia 2: API CKAN via proxies ──
+  try {
+    setStatus('CKAN via proxy...', 'var(--yellow)');
+    const data = await fetchViaCKANProxy();
+    if (data?.length) { setStatus('PROXY ✓', 'var(--green)'); return data; }
+  } catch(e) { console.warn('[TD] CKAN proxy:', e.message); }
+
+  // ── Estratégia 3: CSV direto + proxies ──
+  try {
+    setStatus('CSV download...', 'var(--yellow)');
+    const data = await fetchViaCSV();
+    if (data?.length) { setStatus('CSV ✓', 'var(--green)'); return data; }
+  } catch(e) { console.warn('[TD] CSV:', e.message); }
+
+  setStatus('SEM CONEXÃO', 'var(--red)');
+  throw new Error(
+    'Conexão automática indisponível.\n' +
+    'Configure o Google Apps Script clicando em ⚙ Auto-Sync, ou importe o CSV manualmente.'
+  );
+}
+
+// ── Processa JSON da API CKAN ──
+function processJSON(records) {
+  const normKey = k => (k||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/\s+/g,'');
+
+  // Detecta nomes reais das colunas no primeiro registro
+  const sample = records[0];
+  const keys   = Object.keys(sample);
+  const findK  = (...needles) => keys.find(k => needles.some(n => normKey(k).includes(normKey(n)))) || null;
+
+  const kTipo  = findK('tipotitulo','tipo');
+  const kVenc  = findK('datavencimento','vencimento');
+  const kBase  = findK('database','base');
+  const kTaxaC = findK('taxacompra','compra');
+  const kTaxaV = findK('taxavenda','venda');
+  const kPuC   = findK('pucompra','pucompra');
+  const kPuV   = findK('puvenda');
+
+  if (!kTipo || !kBase) throw new Error(`CKAN: colunas não mapeadas. Chaves: ${keys.slice(0,6).join(', ')}`);
+
+  const rows = [];
+  for (const r of records) {
+    const tipo  = (r[kTipo]||'').trim();
+    const base  = parseDate((r[kBase]||'').trim());
+    if (!tipo || !base) continue;
+    const venc  = parseDate((r[kVenc]||'').trim());
+    const taxaC = parseNum(String(r[kTaxaC]||''));
+    const taxaV = parseNum(String(r[kTaxaV]||''));
+    const puC   = parseNum(String(r[kPuC]||''));
+    const puV   = parseNum(String(r[kPuV]||''));
+    if (isNaN(taxaC) && isNaN(taxaV)) continue;
+    rows.push({ tipo, venc, base, taxaC, taxaV, puC, puV });
+  }
+
+  rows.sort((a,b) => a.base - b.base);
+
+  ratesByBondYear = {};
+  for (const row of rows) {
+    const year = row.venc ? row.venc.getFullYear() : 9999;
+    const key  = row.tipo + '|' + year;
+    if (!ratesByBondYear[key]) ratesByBondYear[key] = [];
+    ratesByBondYear[key].push(row);
+  }
+  return rows;
+}
+
+// ══════════════════════════════════════════════════════════════
+// CSV PARSING — robusto para arquivos do Tesouro Transparente
+// ══════════════════════════════════════════════════════════════
+function processCSV(txt) {
+  // Remove BOM se existir
+  txt = txt.replace(/^\uFEFF/, '');
+
+  // Detecta separador: ponto-e-vírgula ou vírgula
+  const firstLine = txt.split(/\r?\n/)[0];
+  const sep = firstLine.split(';').length > firstLine.split(',').length ? ';' : ',';
+
+  // Normaliza quebras de linha
+  const lines = txt.split(/\r?\n/).filter(l => l.trim());
+  if (lines.length < 2) throw new Error('Arquivo sem dados');
+
+  // Parse de cabeçalho — normaliza acentuação e espaços
+  const normHeader = h => h.trim()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')  // remove acentos
+    .toLowerCase().replace(/\s+/g,' ');
+
+  const rawHeaders = lines[0].split(sep).map(h => h.replace(/^"|"$/g,'').trim());
+  const headers = rawHeaders.map(normHeader);
+
+  // Mapeamento flexível de colunas
+  const findCol = (...keys) => {
+    for (const k of keys) {
+      const idx = headers.findIndex(h => h.includes(normHeader(k)));
+      if (idx >= 0) return idx;
+    }
+    return -1;
+  };
+
+  const iType  = findCol('tipo titulo','tipo t');
+  const iVenc  = findCol('data vencimento');
+  const iBase  = findCol('data base');
+  const iTaxaC = findCol('taxa compra','taxacompra');
+  const iTaxaV = findCol('taxa venda','taxavenda');
+  const iPuC   = findCol('pu compra','pucompra');
+  const iPuV   = findCol('pu venda','puvenda');
+
+  if (iType < 0 || iBase < 0) {
+    throw new Error(
+      `Colunas não encontradas. Cabeçalho detectado: "${rawHeaders.slice(0,4).join(' | ')}..."\n` +
+      `Separador usado: "${sep}". Verifique se o arquivo é o CSV do Tesouro Transparente.`
+    );
+  }
+
+  // Função de parse de campo CSV (com aspas)
+  const getField = (cols, idx) => {
+    if (idx < 0 || idx >= cols.length) return '';
+    return cols[idx].replace(/^"|"$/g,'').trim();
+  };
+
+  const rows = [];
+  for (let li = 1; li < lines.length; li++) {
+    const line = lines[li];
+    if (!line.trim()) continue;
+
+    // Split respeitando aspas
+    const cols = [];
+    let cur = '', inQ = false;
+    for (let ci = 0; ci < line.length; ci++) {
+      const ch = line[ci];
+      if (ch === '"') { inQ = !inQ; }
+      else if (ch === sep && !inQ) { cols.push(cur); cur = ''; }
+      else cur += ch;
+    }
+    cols.push(cur);
+
+    const tipo  = getField(cols, iType);
+    const dvStr = getField(cols, iVenc);
+    const dbStr = getField(cols, iBase);
+    if (!tipo || !dbStr) continue;
+
+    const venc  = parseDate(dvStr);
+    const base  = parseDate(dbStr);
+    if (!base) continue;
+
+    const taxaC = parseNum(getField(cols, iTaxaC));
+    const taxaV = parseNum(getField(cols, iTaxaV));
+    const puC   = parseNum(getField(cols, iPuC));
+    const puV   = parseNum(getField(cols, iPuV));
+    if (isNaN(taxaC) && isNaN(taxaV)) continue;
+
+    rows.push({ tipo, venc, base, taxaC, taxaV, puC, puV });
+  }
+
+  if (!rows.length) throw new Error('Nenhuma linha válida encontrada. Verifique o arquivo.');
+
+  rows.sort((a,b) => a.base - b.base);
+
+  // Build index
+  ratesByBondYear = {};
+  for (const row of rows) {
+    const year = row.venc ? row.venc.getFullYear() : 9999;
+    const key  = row.tipo + '|' + year;
+    if (!ratesByBondYear[key]) ratesByBondYear[key] = [];
+    ratesByBondYear[key].push(row);
+  }
+
+  return rows;
+}
+
+// ══════════════════════════════════════════════════════════════
+// SIDEBAR TREE
+// ══════════════════════════════════════════════════════════════
+const TYPE_ORDER = [
+  'Tesouro IPCA+',
+  'Tesouro IPCA+ com Juros Semestrais',
+  'Tesouro Prefixado',
+  'Tesouro Prefixado com Juros Semestrais',
+  'Tesouro Renda+ Aposentadoria Extra',
+  'Tesouro Selic',
+];
+const TYPE_ABBR = {
+  'Tesouro IPCA+':                          'IPCA+',
+  'Tesouro IPCA+ com Juros Semestrais':     'IPCA+ c/ Juros Sem.',
+  'Tesouro Prefixado':                      'Prefixado',
+  'Tesouro Prefixado com Juros Semestrais': 'Prefixado c/ Juros Sem.',
+  'Tesouro Renda+ Aposentadoria Extra':     'Renda+ Aposentadoria',
+  'Tesouro Selic':                          'Selic',
+};
+
+function buildTree(data) {
+  // Gather groups
+  const groups = {};
+  for (const row of data) {
+    if (!groups[row.tipo]) groups[row.tipo] = {};
+    const year = row.venc ? row.venc.getFullYear() : 9999;
+    if (!groups[row.tipo][year]) groups[row.tipo][year] = { last: null };
+    if (!isNaN(row.taxaC)) groups[row.tipo][year].last = row.taxaC;
+  }
+
+  const tree = document.getElementById('bond-tree');
+  tree.innerHTML = '';
+
+  const sorted = Object.keys(groups).sort((a,b)=>{
+    const ai=TYPE_ORDER.indexOf(a), bi=TYPE_ORDER.indexOf(b);
+    if(ai<0&&bi<0) return a.localeCompare(b);
+    if(ai<0) return 1; if(bi<0) return -1;
+    return ai-bi;
+  });
+
+  for (const tipo of sorted) {
+    const years = Object.keys(groups[tipo]).map(Number).sort((a,b)=>a-b);
+    const abbr  = TYPE_ABBR[tipo]||tipo.replace('Tesouro ','');
+
+    const gEl = document.createElement('div');
+    gEl.className = 'tg';
+
+    const hdr = document.createElement('div');
+    hdr.className = 'tg-hdr';
+    hdr.innerHTML = `<span class="tg-arrow">▶</span><span class="tg-name">${abbr}</span><span class="tg-count">${years.length}</span>`;
+    hdr.onclick = () => {
+      const c = gEl.querySelector('.tg-children');
+      const a = hdr.querySelector('.tg-arrow');
+      c.classList.toggle('open');
+      a.classList.toggle('open');
+    };
+
+    const children = document.createElement('div');
+    children.className = 'tg-children';
+
+    for (const year of years) {
+      const rate = groups[tipo][year].last;
+      const matEl = document.createElement('div');
+      matEl.className = 'tg-mat';
+      matEl.dataset.tipo = tipo;
+      matEl.dataset.year = year;
+      matEl.innerHTML = `<span class="mat-dot"></span><span class="mat-year">${year === 9999 ? 'Sem venc.' : year}</span><span class="mat-rate">${rate ? rate.toFixed(2)+'%' : ''}</span>`;
+      matEl.onclick = () => selectBond(tipo, year === 9999 ? null : year, matEl);
+      children.appendChild(matEl);
+    }
+
+    gEl.appendChild(hdr);
+    gEl.appendChild(children);
+    tree.appendChild(gEl);
+  }
+
+  // Auto-open first group
+  const firstHdr = tree.querySelector('.tg-hdr');
+  if (firstHdr) firstHdr.click();
+}
+
+function selectBond(tipo, year, el) {
+  document.querySelectorAll('.tg-mat').forEach(m => m.classList.remove('active'));
+  el.classList.add('active');
+  selBond = tipo;
+  selYear = year;
+  updateChart();
+}
+
+// ══════════════════════════════════════════════════════════════
+// GET DATA FOR CURRENT SELECTION
+// ══════════════════════════════════════════════════════════════
+function getSelectedData() {
+  if (!selBond) return [];
+  const key = selBond+'|'+(selYear||9999);
+  const rows = ratesByBondYear[key] || [];
+
+  const from = fmt.fromInput(document.getElementById('date-from').value);
+  const to   = fmt.fromInput(document.getElementById('date-to').value);
+
+  return rows.filter(r => {
+    if (from && r.base < from) return false;
+    if (to && r.base > to)     return false;
+    return true;
+  });
+}
+
+// ══════════════════════════════════════════════════════════════
+// OHLC AGGREGATION
+// ══════════════════════════════════════════════════════════════
+function buildOHLC(rows, period, usePU) {
+  const getPeriodKey = d => {
+    if (period === 'D') return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+    if (period === 'W') {
+      const dd = new Date(d); const day = dd.getDay()||7;
+      dd.setDate(dd.getDate()+4-day);
+      const ys = new Date(dd.getFullYear(),0,1);
+      const wk = Math.ceil((((dd-ys)/864e5)+1)/7);
+      return `${dd.getFullYear()}-W${String(wk).padStart(2,'0')}`;
+    }
+    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+  };
+  const groups = new Map();
+  for (const row of rows) {
+    const v = usePU ? row.puC : row.taxaC;
+    if (v===null||isNaN(v)) continue;
+    const key = getPeriodKey(row.base);
+    if (!groups.has(key)) {
+      groups.set(key, { date: row.base, open: v, high: v, low: v, close: v });
+    } else {
+      const g = groups.get(key);
+      g.high  = Math.max(g.high,  v);
+      g.low   = Math.min(g.low,   v);
+      g.close = v;
+    }
+  }
+  return [...groups.values()].sort((a,b) => a.date-b.date);
+}
+
+// ══════════════════════════════════════════════════════════════
+// CANDLESTICK PLUGIN
+// ══════════════════════════════════════════════════════════════
+const candlestickPlugin = {
+  id: 'candlestick',
+  afterDatasetsDraw(chart) {
+    const cfg = chart._candleCfg;
+    if (!cfg || !cfg.enabled || !cfg.ohlc.length) return;
+    const { ctx, scales: { x, y } } = chart;
+    const ohlc    = cfg.ohlc;
+    const invert  = cfg.invert;
+    const n       = ohlc.length;
+    const xStep   = n > 1 ? (x.getPixelForTick(Math.min(1,n-1)) - x.getPixelForTick(0)) : 12;
+    const candleW = Math.max(2, Math.min(24, Math.abs(xStep) * 0.65));
+
+    ctx.save();
+    for (let i = 0; i < n; i++) {
+      const c      = ohlc[i];
+      const xPx    = x.getPixelForTick(i);
+      const oPx    = y.getPixelForValue(c.open);
+      const cPx    = y.getPixelForValue(c.close);
+      const hPx    = y.getPixelForValue(c.high);
+      const lPx    = y.getPixelForValue(c.low);
+
+      // For rates: close > open = taxa SUBIU = título ficou mais barato = VERDE (oportunidade)
+      // For PU:    close > open = PU SUBIU  = quem tem lucra = VERDE
+      const isUp   = c.close >= c.open;
+      const col    = isUp ? '#00c853' : '#ff3d3d';
+      const colDim = isUp ? 'rgba(0,200,83,0.15)' : 'rgba(255,61,61,0.15)';
+
+      const bodyTop = Math.min(oPx, cPx);
+      const bodyH   = Math.max(1.5, Math.abs(cPx - oPx));
+      const wickTop = Math.min(hPx, lPx);
+      const wickBot = Math.max(hPx, lPx);
+
+      // Shadow / glow
+      ctx.shadowColor  = col;
+      ctx.shadowBlur   = candleW > 6 ? 4 : 2;
+
+      // Wick
+      ctx.strokeStyle = col;
+      ctx.lineWidth   = Math.max(1, candleW * 0.12);
+      ctx.beginPath();
+      ctx.moveTo(xPx, wickTop);
+      ctx.lineTo(xPx, bodyTop);
+      ctx.moveTo(xPx, bodyTop + bodyH);
+      ctx.lineTo(xPx, wickBot);
+      ctx.stroke();
+
+      // Body fill
+      ctx.shadowBlur = 0;
+      ctx.fillStyle  = isUp ? col : colDim;
+      ctx.fillRect(xPx - candleW/2, bodyTop, candleW, bodyH);
+
+      // Body border
+      ctx.strokeStyle = col;
+      ctx.lineWidth   = 1;
+      ctx.strokeRect(xPx - candleW/2, bodyTop, candleW, bodyH);
+    }
+    ctx.shadowBlur = 0;
+    ctx.restore();
+  }
+};
+Chart.register(candlestickPlugin);
+
+// ══════════════════════════════════════════════════════════════
+// UPDATE CHART
+// ══════════════════════════════════════════════════════════════
+function updateChart() {
+  if (!selBond) return;
+  const data = getSelectedData();
+
+  const nEma  = Math.max(2, parseInt(document.getElementById('ma-ema').value)||9);
+  const nSmaS = Math.max(2, parseInt(document.getElementById('ma-short').value)||21);
+  const nSmaL = Math.max(2, parseInt(document.getElementById('ma-long').value)||50);
+
+  document.getElementById('sl-ema').textContent  = nEma;
+  document.getElementById('sl-mmc').textContent  = nSmaS;
+  document.getElementById('sl-mml').textContent  = nSmaL;
+
+  if (data.length === 0) { showEmpty(); return; }
+
+  const usePU     = opts.pu;
+  const useCandle = opts.candle;
+  const candlePer = document.getElementById('candle-period')?.value || 'W';
+
+  // Dados brutos para stats e escala
+  const rawVals = usePU ? data.map(d => d.puC) : data.map(d => d.taxaC);
+  const valid   = rawVals.filter(v => !isNaN(v) && v!==null);
+  if (!valid.length) { showEmpty(); return; }
+
+  const maxV = arrMax(valid);
+  const minV = arrMin(valid);
+  const curV = valid[valid.length-1];
+
+  // OHLC ou linha
+  let labels, closeVals, ohlcData = null;
+  if (useCandle) {
+    ohlcData  = buildOHLC(data, candlePer, usePU);
+    labels    = ohlcData.map(c => {
+      if (candlePer==='M') return c.date.toLocaleDateString('pt-BR',{month:'short',year:'2-digit'});
+      if (candlePer==='W') return c.date.toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit'});
+      return fmt.date(c.date);
+    });
+    closeVals = ohlcData.map(c => c.close);
+  } else {
+    labels    = data.map(d => fmt.date(d.base));
+    closeVals = rawVals;
+  }
+
+  // Médias sobre closes
+  const mmEma = ema(closeVals, nEma);
+  const mmS   = sma(closeVals, nSmaS);
+  const mmL   = sma(closeVals, nSmaL);
+
+  const curEma  = mmEma[mmEma.length-1];
+  const curMMS  = mmS[mmS.length-1];
+  const curMML  = mmL[mmL.length-1];
+  const prevEma = mmEma[mmEma.length-2];
+  const prevMMS = mmS[mmS.length-2];
+
+  const varPct   = maxV!==minV ? ((curV-minV)/(maxV-minV))*100 : 50;
+  const distTopo = maxV!==minV ? ((maxV-curV)/maxV)*100 : 0;
+
+  let signal = 'neutro', sigTxt = 'NEUTRO — AGUARDAR';
+  if (!usePU && curMML!==null) {
+    const emaCrossUp   = prevEma!==null&&prevMMS!==null&&prevEma<prevMMS&&curEma>=curMMS;
+    const emaCrossDown = prevEma!==null&&prevMMS!==null&&prevEma>prevMMS&&curEma<=curMMS;
+    const aboveSma50   = curV > curMML;
+    const belowSma50   = curV < curMML;
+    if      (emaCrossUp   && aboveSma50) { signal='compra'; sigTxt='▲ FORTE COMPRA — EMA9 × SMA21 ↑'; }
+    else if (aboveSma50   && curEma>curMMS) { signal='compra'; sigTxt='▲ COMPRA — Taxa acima SMA50'; }
+    else if (emaCrossDown && belowSma50) { signal='venda';  sigTxt='▼ FORTE VENDA — EMA9 × SMA21 ↓'; }
+    else if (belowSma50   && curEma<curMMS) { signal='venda';  sigTxt='▼ VENDA — Taxa abaixo SMA50'; }
+  }
+
+  const el = id => document.getElementById(id);
+  el('sv-current').textContent = usePU ? fmt.pu(curV)   : fmt.rate(curV);
+  el('sv-ema').textContent     = curEma ? (usePU?fmt.pu(curEma):fmt.rate(curEma)) : '—';
+  el('sv-mmc').textContent     = curMMS ? (usePU?fmt.pu(curMMS):fmt.rate(curMMS)) : '—';
+  el('sv-mml').textContent     = curMML ? (usePU?fmt.pu(curMML):fmt.rate(curMML)) : '—';
+  el('sv-max').textContent     = usePU ? fmt.pu(maxV)   : fmt.rate(maxV);
+  el('sv-min').textContent     = usePU ? fmt.pu(minV)   : fmt.rate(minV);
+  el('sv-dist').textContent    = distTopo.toFixed(1)+'%';
+  el('sv-var').textContent     = varPct.toFixed(1)+'%';
+  el('var-fg').style.width     = varPct+'%';
+  el('sig-badge').className    = 'sig-badge '+signal;
+  el('sig-badge').textContent  = sigTxt;
+
+  const periodoStr = useCandle ? ({D:'Diário',W:'Semanal',M:'Mensal'}[candlePer]) : 'Linha';
+  const yearStr = selYear || '—';
+  el('chart-ttl').innerHTML    = `<strong>${selBond}</strong> · Venc. ${yearStr} · ${usePU?'PU (R$)':'Taxa (% a.a.)'} · <span style="color:var(--text-dim)">${periodoStr}</span>`;
+  el('chart-info').textContent = useCandle
+    ? `${ohlcData.length} candles (${data.length} pregões) · Scroll=zoom · Arrastar=pan`
+    : `${data.length} pregões · Scroll=zoom · Arrastar=pan`;
+
+  const pad = (maxV-minV)*0.05 || 0.05;
+
+  // Dataset de preço (invisível em modo candle — só serve pra escala Y)
+  const priceDataset = useCandle
+    ? { label:'Close', data:closeVals, borderColor:'transparent', backgroundColor:'transparent', pointRadius:0, fill:false, order:10 }
+    : { label:'Taxa Compra', data:closeVals, borderColor:'#b0bec5', borderWidth:1.0, pointRadius:0, tension:0.05, fill:false, order:4 };
+
+  const zoneBands = buildZoneBands(closeVals, mmL, opts.zones && !usePU && !useCandle);
+
+  const datasets = [
+    priceDataset,
+    { label:`EMA ${nEma}`,  data:mmEma, borderColor:'#ff4444', borderWidth:2.0, pointRadius:0, tension:0.3, fill:false, order:3 },
+    { label:`SMA ${nSmaS}`, data:mmS,   borderColor:'#40c4ff', borderWidth:2.0, pointRadius:0, tension:0.2, fill:false, order:2 },
+    { label:`SMA ${nSmaL}`, data:mmL,   borderColor:'#00e676', borderWidth:2.6, pointRadius:0, tension:0.2, fill:false, order:1 },
+    ...zoneBands,
+  ];
+
+  destroyChart();
+
+  const ctx = document.getElementById('main-chart').getContext('2d');
+  chart = new Chart(ctx, {
+    type: 'line',
+    data: { labels, datasets },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      animation: { duration: useCandle ? 0 : 150 },
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: {
+          labels: {
+            color: '#6a9abf',
+            font: { family:"'JetBrains Mono'", size:10 },
+            boxWidth:18, padding:14,
+            filter: item => item.text!=='Close' && !item.text.startsWith('__'),
+          }
+        },
+        tooltip: {
+          backgroundColor: '#060e18',
+          borderColor: '#2a4060',
+          borderWidth: 1,
+          padding: 10,
+          titleColor: '#6a9abf',
+          bodyColor: '#ffffff',
+          titleFont: { family:"'JetBrains Mono'", size:9 },
+          bodyFont:  { family:"'JetBrains Mono'", size:11 },
+          callbacks: {
+            label: ctx => {
+              if (ctx.dataset.label==='Close'||ctx.dataset.label.startsWith('__')) return null;
+              const v = ctx.raw;
+              if (v===null||v===undefined) return null;
+              return `${ctx.dataset.label}: ${usePU?fmt.pu(v):(isNaN(v)?'—':v.toFixed(2)+'%')}`;
+            },
+            afterBody: items => {
+              if (!useCandle||!ohlcData) return;
+              const i = items[0]?.dataIndex;
+              if (i===undefined) return;
+              const c = ohlcData[i];
+              if (!c) return;
+              const f = v => usePU ? fmt.pu(v) : fmt.rate(v);
+              return ['──────────────',`  Abertura  : ${f(c.open)}`,`  Máximo    : ${f(c.high)}`,`  Mínimo    : ${f(c.low)}`,`  Fechamento: ${f(c.close)}`];
+            },
+            title: items => items[0]?.label || '',
+          },
+          filter: item => item.dataset.label!=='Close' && !item.dataset.label.startsWith('__'),
+        },
+        zoom: {
+          pan:  { enabled:true, mode:'x' },
+          zoom: { wheel:{enabled:true}, pinch:{enabled:true}, mode:'x' },
+        },
+      },
+      scales: {
+        x: {
+          ticks: { color:'#8ab0cc', font:{family:"'JetBrains Mono'",size:9}, maxTicksLimit:useCandle?18:14, maxRotation:0 },
+          grid:  { color:'rgba(30,50,75,.7)' },
+          border:{ color:'#1c2d42' },
+        },
+        y: {
+          position: 'right',
+          reverse: opts.invert && !usePU,
+          min: minV - pad,
+          max: maxV + pad,
+          ticks: { color:'#ffffff', font:{family:"'JetBrains Mono'",size:10,weight:'500'}, callback: v => usePU?'R$'+v.toFixed(0):v.toFixed(2)+'%' },
+          grid:  { color:'rgba(30,50,75,.7)' },
+          border:{ color:'#1c2d42' },
+        },
+      },
+    },
+  });
+
+  // Injeta config para plugin de candle
+  chart._candleCfg = { enabled: useCandle, ohlc: ohlcData||[], invert: opts.invert&&!usePU, usePU };
+
+  ctx.canvas.style.background = '#020508';
+  updateTable(data);
+}
+
+// ══════════════════════════════════════════════════════════════
+// ZONE BANDS
+// ══════════════════════════════════════════════════════════════
+function buildZoneBands(vals, mmL, active) {
+  if (!active) return [];
+  const maxV = arrMax(vals.filter(v=>v!==null&&!isNaN(v)));
+  return [{
+    label: '__zone_compra',
+    data: vals.map((v,i) => (mmL[i]!==null && v>mmL[i]) ? v : null),
+    borderColor: 'transparent',
+    backgroundColor: 'rgba(0,230,118,0.06)',
+    pointRadius: 0,
+    fill: { target:{value:maxV}, above:'rgba(0,230,118,0.06)', below:'transparent' },
+    tension: 0.05,
+    order: 10,
+  }];
+}
+
+// ══════════════════════════════════════════════════════════════
+// TABLE
+// ══════════════════════════════════════════════════════════════
+function updateTable(data) {
+  const tbody = document.getElementById('data-table');
+  const rows  = [...data].reverse().slice(0, 40);
+
+  if (!rows.length) {
+    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:16px;color:var(--text-dim)">Sem dados</td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = rows.map((row, i) => {
+    const prev   = i < rows.length-1 ? rows[i+1] : null;
+    const dTaxa  = prev ? row.taxaC - prev.taxaC : null;
+    const dPU    = prev && !isNaN(row.puC) && !isNaN(prev.puC) ? row.puC - prev.puC : null;
+
+    const taxaClass = dTaxa===null?'' : dTaxa>0?'up':'dn';
+    const puClass   = dPU===null?'' : dPU>0?'up':'dn';
+
+    const dTaxaStr = dTaxa!==null ? `<span class="${taxaClass}">${dTaxa>0?'+':''}${dTaxa.toFixed(2)}%</span>` : '—';
+    const dPUStr   = dPU!==null   ? `<span class="${puClass}">${dPU>0?'+':''}${Math.abs(dPU).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2})} ${dPU>0?'↑':'↓'}</span>` : '—';
+
+    return `<tr>
+      <td>${fmt.date(row.base)}</td>
+      <td>${fmt.rate(row.taxaC)}</td>
+      <td>${fmt.rate(row.taxaV)}</td>
+      <td>${fmt.pu(row.puC)}</td>
+      <td>${fmt.pu(row.puV)}</td>
+      <td>${dTaxaStr}</td>
+      <td>${dPUStr}</td>
+    </tr>`;
+  }).join('');
+}
+
+// ══════════════════════════════════════════════════════════════
+// CONTROLS
+// ══════════════════════════════════════════════════════════════
+function toggleOpt(key) {
+  opts[key] = !opts[key];
+  const btn = document.getElementById('btn-'+key);
+  btn.classList.toggle('on', opts[key]);
+  if (key === 'candle') {
+    document.getElementById('candle-period-wrap').style.display = opts.candle ? 'flex' : 'none';
+  }
+  updateChart();
+}
+
+function setRange(days, label) {
+  document.querySelectorAll('.qbtn').forEach(b=>b.classList.remove('active'));
+  event?.target?.classList.add('active');
+  const to   = new Date();
+  const from = days ? new Date(to.getTime() - days*864e5) : new Date('2002-01-01');
+  document.getElementById('date-from').value = fmt.toInput(from);
+  document.getElementById('date-to').value   = fmt.toInput(to);
+  updateChart();
+}
+
+function resetZoom() {
+  if (chart) chart.resetZoom();
+}
+
+// ══════════════════════════════════════════════════════════════
+// UI HELPERS
+// ══════════════════════════════════════════════════════════════
+function destroyChart() {
+  if (chart) { chart.destroy(); chart=null; }
+}
+
+function showEmpty() {
+  destroyChart();
+  document.getElementById('chart-ttl').textContent = 'Sem dados para o período selecionado';
+}
+
+function setLoadText(t) {
+  const el = document.getElementById('load-text');
+  if (el) el.firstChild.textContent = t;
+  else console.log(t);
+}
+
+function showApp() {
+  document.getElementById('loading').style.display = 'none';
+  document.getElementById('app').classList.add('visible');
+}
+
+function showToast(msg, dur=6000) {
+  const el = document.createElement('div');
+  el.className = 'toast';
+  el.textContent = msg;
+  document.body.appendChild(el);
+  setTimeout(() => el.remove(), dur);
+}
+
+// ══════════════════════════════════════════════════════════════
+// INIT
+// ══════════════════════════════════════════════════════════════
+function initUI(data) {
+  allData = data;
+  if (!allData.length) {
+    showApp();
+    document.getElementById('bond-tree').innerHTML = '<div class="empty-state"><div class="empty-icon">⚠️</div><div class="empty-title">Nenhum dado encontrado</div><div class="empty-sub">Verifique o arquivo CSV</div></div>';
+    return;
+  }
+
+  // Date range defaults (last 5 years)
+  const dates   = allData.map(d=>d.base).filter(Boolean);
+  const maxDate = new Date(dates.reduce((m,d)=>d>m?d:m, dates[0]));
+  const minDate = new Date(maxDate); minDate.setFullYear(minDate.getFullYear()-5);
+  document.getElementById('date-from').value = fmt.toInput(minDate);
+  document.getElementById('date-to').value   = fmt.toInput(maxDate);
+  document.getElementById('last-date').textContent = fmt.date(maxDate);
+
+  buildTree(allData);
+  showApp();
+
+  // Auto-select first Renda+ 2084 or first available
+  setTimeout(() => {
+    const renda2084 = document.querySelector('[data-tipo="Tesouro Renda+ Aposentadoria Extra"][data-year="2084"]');
+    const firstIpca = document.querySelector('[data-tipo="Tesouro IPCA+"]');
+    const target    = renda2084 || firstIpca;
+    if (target) {
+      // Open parent
+      const parent = target.closest('.tg-children');
+      if (parent && !parent.classList.contains('open')) {
+        parent.classList.add('open');
+        parent.previousElementSibling?.querySelector('.tg-arrow')?.classList.add('open');
+      }
+      const tipo = target.dataset.tipo;
+      const year = parseInt(target.dataset.year)||null;
+      selectBond(tipo, year, target);
+    }
+  }, 100);
+}
+
+async function reloadData() {
+  document.getElementById('loading').style.display = 'flex';
+  document.getElementById('app').classList.remove('visible');
+  try {
+    const data = await fetchAllData();
+    initUI(data);
+  } catch(e) {
+    showApp();
+    showToast('⚠ '+e.message);
+    console.error(e);
+  }
+}
+
+function handleUpload(evt) {
+  const file = evt.target.files[0];
+  if (!file) return;
+  document.getElementById('loading').style.display = 'flex';
+  document.getElementById('app').classList.remove('visible');
+  setLoadText('Lendo ' + file.name + ' (' + (file.size/1024|0) + ' KB)...');
+
+  // Tenta UTF-8 primeiro, depois Latin-1 (windows-1252) — padrão do Tesouro
+  const tryEncoding = (enc) => new Promise((res, rej) => {
+    const r = new FileReader();
+    r.onload  = e => res(e.target.result);
+    r.onerror = () => rej(new Error('Erro de leitura'));
+    r.readAsText(file, enc);
+  });
+
+  (async () => {
+    let txt = null;
+    let usedEnc = '';
+    for (const enc of ['UTF-8', 'windows-1252', 'ISO-8859-1']) {
+      try {
+        const raw = await tryEncoding(enc);
+        // Verifica se tem colunas esperadas
+        const firstLines = raw.slice(0, 500);
+        if (firstLines.toLowerCase().includes('tipo') && firstLines.includes('/')) {
+          txt = raw; usedEnc = enc; break;
+        }
+      } catch(e) { /* tenta próximo */ }
+    }
+    if (!txt) {
+      showApp();
+      showToast('Não foi possível ler o arquivo.');
+      return;
+    }
+    try {
+      setLoadText(`Processando (${usedEnc})...`);
+      await new Promise(r => setTimeout(r, 30)); // yield para UI respirar
+      const data = processCSV(txt);
+      initUI(data);
+    } catch(err) {
+      showApp();
+      showToast('⚠ ' + err.message, 10000);
+      console.error(err);
+    }
+  })();
+  evt.target.value = '';
+}
+
+// Double-click to reset zoom
+// ══════════════════════════════════════════════════════════════
+// CROSSHAIR FULL-SCREEN
+// ══════════════════════════════════════════════════════════════
+const crosshairPlugin = {
+  id: 'fullCrosshair',
+  afterInit(chartInst) {
+    const canvas = chartInst.canvas;
+    chartInst._ch = { x: null, y: null, visible: false };
+
+    canvas.addEventListener('mousemove', e => {
+      const rect = canvas.getBoundingClientRect();
+      chartInst._ch.x = e.clientX - rect.left;
+      chartInst._ch.y = e.clientY - rect.top;
+      chartInst._ch.visible = true;
+      chartInst.draw();
+    });
+    canvas.addEventListener('mouseleave', () => {
+      chartInst._ch.visible = false;
+      chartInst.draw();
+    });
+  },
+  afterDatasetsDraw(chartInst) {
+    const ch = chartInst._ch;
+    if (!ch?.visible) return;
+
+    const { ctx, chartArea: ca, scales: { x, y } } = chartInst;
+    const { x: mx, y: my } = ch;
+
+    // Only draw inside chart area
+    if (mx < ca.left || mx > ca.right || my < ca.top || my > ca.bottom) return;
+
+    ctx.save();
+
+    // ── Lines ──
+    ctx.setLineDash([4, 4]);
+    ctx.lineWidth   = 1;
+    ctx.strokeStyle = 'rgba(180,210,255,0.55)';
+
+    // Vertical
+    ctx.beginPath();
+    ctx.moveTo(mx, ca.top);
+    ctx.lineTo(mx, ca.bottom);
+    ctx.stroke();
+
+    // Horizontal
+    ctx.beginPath();
+    ctx.moveTo(ca.left, my);
+    ctx.lineTo(ca.right, my);
+    ctx.stroke();
+
+    ctx.setLineDash([]);
+
+    // ── Label Y (taxa) — lado direito ──
+    const yVal = y.getValueForPixel(my);
+    const yTxt = typeof yVal === 'number'
+      ? (chartInst._candleCfg?.usePU
+          ? 'R$ ' + yVal.toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2})
+          : yVal.toFixed(2) + '%')
+      : '';
+
+    const PAD  = 5;
+    const H    = 18;
+    ctx.font   = "bold 10px 'JetBrains Mono', monospace";
+    const wY   = ctx.measureText(yTxt).width + PAD*2;
+    const xLbl = ca.right + 2;
+    const yLbl = my - H/2;
+
+    ctx.fillStyle   = '#ffffff';
+    ctx.fillRect(xLbl, yLbl, wY, H);
+    ctx.fillStyle   = '#020508';
+    ctx.textBaseline = 'middle';
+    ctx.textAlign    = 'left';
+    ctx.fillText(yTxt, xLbl + PAD, my);
+
+    // ── Label X (data) — abaixo do eixo ──
+    // Snap to nearest tick
+    const ticks = x.ticks;
+    if (ticks?.length) {
+      let closest = 0, minDist = Infinity;
+      for (let i = 0; i < ticks.length; i++) {
+        const px = x.getPixelForTick(i);
+        const d  = Math.abs(px - mx);
+        if (d < minDist) { minDist = d; closest = i; }
+      }
+      const xTxt   = ticks[closest]?.label || '';
+      const wX     = ctx.measureText(xTxt).width + PAD*2;
+      const xBox   = mx - wX/2;
+      const yBox   = ca.bottom + 2;
+
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(xBox, yBox, wX, H);
+      ctx.fillStyle   = '#020508';
+      ctx.textBaseline = 'top';
+      ctx.textAlign    = 'center';
+      ctx.fillText(xTxt, mx, yBox + 3);
+    }
+
+    // ── Dot on price line at cursor X ──
+    const ds = chartInst.data.datasets[0];
+    if (ds?.data) {
+      let closestI = 0, minD = Infinity;
+      for (let i = 0; i < ds.data.length; i++) {
+        const px = x.getPixelForTick(i);
+        const d  = Math.abs(px - mx);
+        if (d < minD) { minD = d; closestI = i; }
+      }
+      const dotV = ds.data[closestI];
+      if (dotV !== null && dotV !== undefined && !isNaN(dotV)) {
+        const dotY = y.getPixelForValue(dotV);
+        ctx.beginPath();
+        ctx.arc(x.getPixelForTick(closestI), dotY, 4, 0, Math.PI*2);
+        ctx.fillStyle   = '#ffffff';
+        ctx.fill();
+        ctx.strokeStyle = '#020508';
+        ctx.lineWidth   = 1.5;
+        ctx.stroke();
+      }
+    }
+
+    ctx.restore();
+  }
+};
+Chart.register(crosshairPlugin);
+
+document.addEventListener('DOMContentLoaded', () => {
+  document.getElementById('main-chart').addEventListener('dblclick', resetZoom);
+});
+
+// ── BOOT ──
+(async () => {
+  try {
+    const data = await fetchAllData();
+    initUI(data);
+  } catch(e) {
+    showApp();
+    document.getElementById('bond-tree').innerHTML = `
+      <div class="empty-state">
+        <div class="empty-icon">📡</div>
+        <div class="empty-title">Sem conexão automática</div>
+        <div class="empty-sub">
+          Configure o proxy gratuito em 3 minutos:<br><br>
+          <button onclick="openGasModal()" style="
+            padding:7px 16px;background:var(--green);border:none;
+            border-radius:4px;color:#000;font-weight:700;font-size:12px;
+            cursor:pointer;margin-bottom:12px;">⚙ Configurar Auto-Sync</button><br>
+          <span style="color:var(--text-dim);font-size:11px">
+            ou importe o CSV manualmente com o botão ↑ no topo
+          </span>
+        </div>
+      </div>`;
+    console.error(e);
+  }
+})();
+</script>
+</body>
+</html>
